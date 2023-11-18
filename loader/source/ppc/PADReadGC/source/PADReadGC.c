@@ -1378,9 +1378,62 @@ u32 PADRead(u32 calledByGame)
 							button |= PAD_BUTTON_Y;
 					}
 				}break;
-//				case 7:	// (2 & plus)
-//				{
-//				}break;
+				case 7:	// (2 & plus)
+				{	//MKDD Config Pirmins Config
+
+					// NC_Z -> GC_X
+					if(BTPad[chan].button & NUN_BUTTON_Z)
+						button |= PAD_BUTTON_X;
+
+					// NC_C = GC_Z
+					if(BTPad[chan].button & NUN_BUTTON_C)
+						button |= PAD_TRIGGER_Z;
+					
+					// WM_B -> GC L/R Depending on Gyroscopeposition. If Tilted all the way both L and R are triggered
+					if(BTPad[chan].button & WM_BUTTON_B)
+					{
+						button |= PAD_TRIGGER_R;
+						Pad[chan].triggerRight = 0xFF;
+						if(BTPad[chan].xAccel[1] > 670)
+						{
+							button |= PAD_TRIGGER_L;
+							Pad[chan].triggerLeft = 0xFF;
+						}
+						if(BTPad[chan].xAccel[1] < 340)
+						{
+							button |= PAD_TRIGGER_L;
+							Pad[chan].triggerLeft = 0xFF;
+						}
+					}
+
+					// WM_Accel Sidekick
+					if(BTPad[chan].xAccel[0] > 800)
+					{
+						button |= PAD_TRIGGER_L;
+						Pad[chan].triggerLeft = 0xFF;
+					}
+					if(BTPad[chan].xAccel[0] < 225)
+					{
+						button |= PAD_TRIGGER_R;
+						Pad[chan].triggerRight = 0xFF;
+					}
+
+					// WM_A = GC_A
+					if(BTPad[chan].button & WM_BUTTON_A)
+						button |= PAD_BUTTON_A;
+
+					// WM_PAD_UP = GC_B
+					if(BTPad[chan].button & WM_BUTTON_UP)
+						button |= PAD_BUTTON_B;
+
+					// WM_PAD_RIGHT = GC_Y
+					if(BTPad[chan].button & WM_BUTTON_DOWN)
+						button |= PAD_BUTTON_Y;
+					
+					// WM_PAD_TWO = GC_B
+					if(BTPad[chan].button & WM_BUTTON_TWO)
+						button |= PAD_BUTTON_B;
+				}break;
 			}
 			if(BTPad[chan].button & WM_BUTTON_ONE)
 				button |= PAD_BUTTON_START;
