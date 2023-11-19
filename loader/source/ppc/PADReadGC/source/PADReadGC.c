@@ -42,6 +42,9 @@ static u32 PrevAdapterChannel3 = 0;
 static u32 PrevAdapterChannel4 = 0;
 static u32 PrevDRCButton = 0;
 
+static u32 counter = 0;
+static u32 leadingedgedoExit = 0;
+
 static s8 OffsetX[NIN_CFG_MAXPAD] = {0};
 static s8 OffsetY[NIN_CFG_MAXPAD] = {0};
 static s8 OffsetCX[NIN_CFG_MAXPAD] = {0};
@@ -84,6 +87,12 @@ u32 PADRead(u32 calledByGame)
 	// Register r2 not changed
 	u32 Rumble = 0, memInvalidate, memFlush;
 	u32 used = 0;
+
+	u32 doExit = 0;
+	u32 doShutdown = 0;
+
+	//Timing
+	counter++;
 
 	PADStatus *Pad = (PADStatus*)(0x93003100); //PadBuff
 	u32 MaxPads;
@@ -180,7 +189,7 @@ u32 PADRead(u32 calledByGame)
 			Pad[WiiUGamepadSlot].triggerRight = 0;
 		if(drcbutton & WIIDRC_BUTTON_R) button |= PAD_TRIGGER_Z;
 		if(drcbutton & WIIDRC_BUTTON_PLUS) button |= PAD_BUTTON_START;
-		if(drcbutton & WIIDRC_BUTTON_HOME) goto DoExit;
+		if(drcbutton & WIIDRC_BUTTON_HOME) doExit = 1;
 		//write in mapped out buttons
 		Pad[WiiUGamepadSlot].button = button;
 		if((Pad[WiiUGamepadSlot].button&0x1030) == 0x1030) //reset by pressing start, Z, R
@@ -304,7 +313,7 @@ u32 PADRead(u32 calledByGame)
 			/* exit by pressing B,Z,R,PAD_BUTTON_DOWN */
 			if((Pad[chan].button&0x234) == 0x234)
 			{
-				goto DoExit;
+				doExit = 1;
 			}
 			if((Pad[chan].button&0x1c00) == 0x1c00 || ((*PadUsed & (1 << chan)) == 0))
 			{
@@ -448,7 +457,7 @@ u32 PADRead(u32 calledByGame)
 		if(calledByGame && HID_CTRL->Power.Mask &&	//exit if power configured and all power buttons pressed
 		((HID_Packet[HID_CTRL->Power.Offset] & HID_CTRL->Power.Mask) == HID_CTRL->Power.Mask))
 		{
-			goto DoExit;
+			doExit = 1;
 		}
 		used |= (1<<chan);
 
@@ -1438,7 +1447,7 @@ u32 PADRead(u32 calledByGame)
 			if(BTPad[chan].button & WM_BUTTON_ONE)
 				button |= PAD_BUTTON_START;
 			if(BTPad[chan].button & WM_BUTTON_HOME)
-				goto DoExit;
+				doExit = 1;
 		}	//end nunchuck configs
 
 		if(BTPad[chan].used & (C_CC | C_CCP))
@@ -1478,7 +1487,7 @@ u32 PADRead(u32 calledByGame)
 				button |= PAD_BUTTON_UP;
 
 			if(BTPad[chan].button & BT_BUTTON_HOME)
-				goto DoExit;
+				doExit = 1;
 		}
 
 		Pad[chan].button = button;
@@ -1500,7 +1509,7 @@ u32 PADRead(u32 calledByGame)
 		//exit by pressing B,Z,R,PAD_BUTTON_DOWN
 		if((Pad[chan].button&0x234) == 0x234)
 		{
-			goto DoExit;
+			doExit = 1;
 		}
 		if((Pad[chan].button&0x1030) == 0x1030)	//reset by pressing start, Z, R
 		{
@@ -1544,39 +1553,49 @@ u32 PADRead(u32 calledByGame)
 		((void(*)(void))0x800010A0)();
 		restoreIRQs(level);
 	}
-	return Rumble;
 
-DoExit:
-	/* disable interrupts */
-	disableIRQs();
-	/* stop audio dma */
-	_dspReg[27] = (_dspReg[27]&~0x8000);
-	/* reset status 1 (DoExit) */
-	*RESET_STATUS = 0x1DEA;
-	while(*RESET_STATUS == 0x1DEA) ;
-	/* disable dcache and icache */
-	disableCaches();
-	/* disable memory protection */
-	_memReg[15] = 0xF;
-	_memReg[16] = 0;
-	_memReg[8] = 0xFF;
-	/* load in stub */
-	do {
-		*stubdest++ = *stubsrc++;
-	} while((stubsize-=4) > 0);
-	/* Allow all IOS IRQs again */
-	*(vu32*)0xCD800004 = 0x36;
-	/* jump to it */
-	bootStub();
-	return 0;
-DoShutdown:
-	/* disable interrupts */
-	disableIRQs();
-	/* stop audio dma */
-	_dspReg[27] = (_dspReg[27]&~0x8000);
-	/* reset status 7 (DoShutdown) */
-	*RESET_STATUS = 0x7DEA;
-	while(1) ;
+	if(!doExit)
+	{
+		if(!leadingedgedoExit) leadingedgedoExit = counter;
+		if((counter - leadingedgedoExit) > 180)
+		{
+			/* disable interrupts */
+			disableIRQs();
+			/* stop audio dma */
+			_dspReg[27] = (_dspReg[27]&~0x8000);
+			/* reset status 1 (DoExit) */
+			*RESET_STATUS = 0x1DEA;
+			while(*RESET_STATUS == 0x1DEA) ;
+			/* disable dcache and icache */
+			disableCaches();
+			/* disable memory protection */
+			_memReg[15] = 0xF;
+			_memReg[16] = 0;
+			_memReg[8] = 0xFF;
+			/* load in stub */
+			do {
+				*stubdest++ = *stubsrc++;
+			} while((stubsize-=4) > 0);
+			/* Allow all IOS IRQs again */
+			*(vu32*)0xCD800004 = 0x36;
+			/* jump to it */
+			bootStub();
+			return 0;
+		}
+	}
+	else leadingedgedoExit = 0;
+	if(doShutdown)
+	{
+		DoShutdown:
+		/* disable interrupts */
+		disableIRQs();
+		/* stop audio dma */
+		_dspReg[27] = (_dspReg[27]&~0x8000);
+		/* reset status 7 (DoShutdown) */
+		*RESET_STATUS = 0x7DEA;
+		while(1) ;
+	}
+	return Rumble;
 }
 
 
