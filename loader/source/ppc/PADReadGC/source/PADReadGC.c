@@ -45,6 +45,8 @@ static u32 PrevDRCButton = 0;
 static u32 counter = 0;
 static u32 leadingedgedoExit = 0;
 
+static u32 xAcceldebounce = 0;
+
 static s8 OffsetX[NIN_CFG_MAXPAD] = {0};
 static s8 OffsetY[NIN_CFG_MAXPAD] = {0};
 static s8 OffsetCX[NIN_CFG_MAXPAD] = {0};
@@ -1403,17 +1405,20 @@ u32 PADRead(u32 calledByGame)
 					{
 						button |= PAD_TRIGGER_R;
 						Pad[chan].triggerRight = 0xFF;
-						if(BTPad[chan].xAccel[1] > 670)
+						if((BTPad[chan].xAccel[1] > 670)|(BTPad[chan].xAccel[1] < 340))
 						{
 							button |= PAD_TRIGGER_L;
 							Pad[chan].triggerLeft = 0xFF;
+							xAcceldebounce = 30;
 						}
-						if(BTPad[chan].xAccel[1] < 340)
+						if(xAcceldebounce > 0)
 						{
 							button |= PAD_TRIGGER_L;
 							Pad[chan].triggerLeft = 0xFF;
+							xAcceldebounce--;
 						}
 					}
+					else xAcceldebounce = 0;
 
 					// WM_Accel Sidekick
 					if(BTPad[chan].xAccel[0] > 800)
@@ -1554,7 +1559,7 @@ u32 PADRead(u32 calledByGame)
 		restoreIRQs(level);
 	}
 
-	if(!doExit)
+	if(doExit)
 	{
 		if(!leadingedgedoExit) leadingedgedoExit = counter;
 		if((counter - leadingedgedoExit) > 180)
